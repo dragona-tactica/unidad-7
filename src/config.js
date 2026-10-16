@@ -16,6 +16,9 @@ export const COLORS = {
   hint: 'rgba(255,255,255,0.55)',
   earInner: '#f6b3b8',
   feature: '#7a0010',
+  phone: '#1b0b10',
+  screen: '#8fd8ff',
+  screenGlow: 'rgba(120, 210, 255, 0.85)',
 };
 
 // Facciones de oso. En las crías la posición se calcula sola a partir del
@@ -51,4 +54,19 @@ export const PARAMS = {
   holdMs: 2500,           // momento de lectura con la palabra formada
   leaveDistance: 40,      // cuánto debe alejarse una C para empezar el juego
   arriveRadius: 160,
+
+  // nivel "pantallas" (después de "Seguir jugando")
+  lives: 5,               // tiempo en familia, compartido por papá y mamá
+  speedUpPerRound: 0.15,  // cuánto más rápido corren las crías en cada ronda
+  maxSpeedUp: 2.2,
+  phoneSpeed: 1.8,
+  phonesBase: 2,          // celulares simultáneos en la primera ronda (+1 por ronda)
+  phoneEveryMs: 3200,
+  phoneLifeMs: 12000,
+  phoneLureRadius: 200,   // las pantallas también atraen a las crías
+  phoneLure: 0.9,
+  hitInvulnMs: 1200,      // tras perder vida, un momento sin recibir daño
+  giftEveryMs: 7000,
+  giftLifeMs: 8000,
+  reunionBonus: 5,        // puntos extra al reunir a toda la familia
 };

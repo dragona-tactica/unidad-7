@@ -1,6 +1,7 @@
 import p5 from 'p5';
 import Matter from 'matter-js';
 import { WORD, ROLES, FAMILIES, FONT, COLORS, CONTROLS, PARAMS, FEATURES } from './config.js';
+import { createHazards, clearHazards, updateHazards, drawHazards, drawHeart, popup } from './hazards.js';
 
 const { Engine, Bodies, Body, Composite, Constraint, Events } = Matter;
 
@@ -24,11 +25,37 @@ new p5((p) => {
   // formed    -> la palabra está armada; mover una C la desarma
   // play      -> las crías huyen, papá y mamá las persiguen y abrazan
   // gathering -> todas las crías volvieron; papá y mamá regresan a su sitio
+  // over      -> (nivel pantallas) se acabó el tiempo en familia
   let phase = 'formed';
   let phaseStart = 0;
   let score = 0;
   let familyHug = false; // la próxima fase 'formed' empieza con el abrazo grupal
   let scoreAt = -1000;
+
+  // Modo: 'classic' al principio; tras completar una vez aparece
+  // "Seguir jugando" y se pasa a 'screens' (celulares, regalos, vida).
+  let mode = 'classic';
+  let completedOnce = false;
+  let round = 0;
+  let lives = PARAMS.lives;
+  let invulnUntil = 0;
+  let banner = null; // { text, at }
+  const hazards = createHazards();
+
+  const ui = {
+    cont: document.getElementById('continue'),
+    over: document.getElementById('over'),
+    overScore: document.getElementById('over-score'),
+    restart: document.getElementById('restart'),
+  };
+  ui.cont.addEventListener('click', () => {
+    ui.cont.blur();
+    startScreens();
+  });
+  ui.restart.addEventListener('click', () => {
+    ui.restart.blur();
+    restart();
+  });
 
   p.setup = () => {
     p.createCanvas(window.innerWidth, window.innerHeight);
@@ -265,12 +292,94 @@ new p5((p) => {
 
     // solo en desarrollo: para inspeccionar el estado desde la consola
     if (import.meta.env.DEV) {
-      window.__game = { p, parents, cubs, Body, get phase() { return phase; }, get score() { return score; } };
+      window.__game = {
+        p, parents, cubs, Body, hazards,
+        get phase() { return phase; },
+        get score() { return score; },
+        get lives() { return lives; },
+        get mode() { return mode; },
+        get round() { return round; },
+        cubSpeed,
+      };
     }
   }
 
   // tras el abrazo grupal, el momento de lectura empieza cuando terminan de soltarse
   const holdMs = () => PARAMS.holdMs + (familyHug ? PARAMS.familyHugMs : 0);
+
+  const cubSpeed = () =>
+    PARAMS.cubMaxSpeed *
+    (mode === 'screens' ? Math.min(1 + PARAMS.speedUpPerRound * (round + 1), PARAMS.maxSpeedUp) : 1);
+
+  function showBanner(text) {
+    banner = { text, at: p.millis() };
+  }
+
+  function startScreens() {
+    mode = 'screens';
+    round = 0;
+    lives = PARAMS.lives;
+    hazards.nextPhone = p.millis() + 1500;
+    hazards.nextGift = p.millis() + PARAMS.giftEveryMs;
+    showBanner('Cuidado con las pantallas');
+    scatter();
+  }
+
+  // Todos a casa, sin abrazos pendientes, para empezar de nuevo.
+  function resetFamily() {
+    for (const P of parents) {
+      if (P.hugging) endHug(P);
+      Body.setPosition(P.body, P.home);
+      Body.setVelocity(P.body, { x: 0, y: 0 });
+    }
+    for (const C of cubs) {
+      C.state = 'home';
+      C.solidAt = null;
+      C.body.collisionFilter = GHOST;
+      Body.setPosition(C.body, C.home);
+    }
+  }
+
+  function gameOver() {
+    setPhase('over');
+    clearHazards(hazards);
+    ui.overScore.textContent = `Puntos ${score}`;
+    ui.over.hidden = false;
+  }
+
+  function restart() {
+    ui.over.hidden = true;
+    resetFamily();
+    score = 0;
+    familyHug = false;
+    clearHazards(hazards);
+    setPhase('formed');
+    startScreens();
+  }
+
+  function onPhone(P, ph) {
+    const t = p.millis();
+    if (t < invulnUntil) return false;
+    lives--;
+    invulnUntil = t + PARAMS.hitInvulnMs;
+    P.hitAt = t;
+    popup(hazards, ph.x, ph.y, '−1', t);
+    if (lives <= 0) gameOver();
+    return true;
+  }
+
+  function onGift(P, g) {
+    const t = p.millis();
+    if (lives >= PARAMS.lives) {
+      score++;
+      scoreAt = t;
+      popup(hazards, g.x, g.y, '+1', t);
+    } else {
+      lives++;
+      popup(hazards, g.x, g.y, '+1 ♥', t);
+    }
+    return true;
+  }
 
   function setPhase(next) {
     phase = next;
@@ -326,6 +435,10 @@ new p5((p) => {
 
   function updateParent(P) {
     const b = P.body;
+    if (phase === 'over') {
+      Body.setVelocity(b, { x: b.velocity.x * 0.85, y: b.velocity.y * 0.85 });
+      return;
+    }
     if (phase === 'gathering') {
       arrive(b, P.home, PARAMS.parentMaxSpeed * 0.8, 0.6);
       return;
@@ -382,16 +495,29 @@ new p5((p) => {
     }
 
     // free: deambula y huye de papá y mamá
+    const vmax = cubSpeed();
     C.wanderAngle += (Math.random() - 0.5) * 0.5;
-    let dx = Math.cos(C.wanderAngle) * PARAMS.cubMaxSpeed * 0.55;
-    let dy = Math.sin(C.wanderAngle) * PARAMS.cubMaxSpeed * 0.55;
+    let dx = Math.cos(C.wanderAngle) * vmax * 0.55;
+    let dy = Math.sin(C.wanderAngle) * vmax * 0.55;
+
+    // las pantallas atraen a las crías
+    for (const ph of hazards.phones) {
+      const ox = ph.x - b.position.x;
+      const oy = ph.y - b.position.y;
+      const dist = Math.hypot(ox, oy);
+      if (dist < PARAMS.phoneLureRadius && dist > 0) {
+        const w = (1 - dist / PARAMS.phoneLureRadius) * vmax * PARAMS.phoneLure;
+        dx += (ox / dist) * w;
+        dy += (oy / dist) * w;
+      }
+    }
 
     for (const P of parents) {
       const ox = b.position.x - P.body.position.x;
       const oy = b.position.y - P.body.position.y;
       const dist = Math.hypot(ox, oy);
       if (dist < PARAMS.fleeRadius && dist > 0) {
-        const w = (1 - dist / PARAMS.fleeRadius) * PARAMS.cubMaxSpeed * 2.2;
+        const w = (1 - dist / PARAMS.fleeRadius) * vmax * 2.2;
         dx += (ox / dist) * w;
         dy += (oy / dist) * w;
       }
@@ -399,12 +525,12 @@ new p5((p) => {
 
     const m = PARAMS.wallMargin;
     const { x, y } = b.position;
-    if (x < m) dx += PARAMS.cubMaxSpeed * (1 - x / m) * 2;
-    if (x > p.width - m) dx -= PARAMS.cubMaxSpeed * (1 - (p.width - x) / m) * 2;
-    if (y < m) dy += PARAMS.cubMaxSpeed * (1 - y / m) * 2;
-    if (y > p.height - m) dy -= PARAMS.cubMaxSpeed * (1 - (p.height - y) / m) * 2;
+    if (x < m) dx += vmax * (1 - x / m) * 2;
+    if (x > p.width - m) dx -= vmax * (1 - (p.width - x) / m) * 2;
+    if (y < m) dy += vmax * (1 - y / m) * 2;
+    if (y > p.height - m) dy -= vmax * (1 - (p.height - y) / m) * 2;
 
-    steer(b, dx, dy, PARAMS.cubMaxSpeed, PARAMS.cubMaxForce);
+    steer(b, dx, dy, vmax, PARAMS.cubMaxForce);
     if (Math.hypot(dx, dy) > 0.01) {
       // el deambular sigue la dirección en la que de verdad corre
       C.wanderAngle += angleDiff(Math.atan2(b.velocity.y, b.velocity.x), C.wanderAngle) * 0.05;
@@ -452,6 +578,7 @@ new p5((p) => {
       if (left) scatter();
     } else if (phase === 'play' && cubs.every((C) => C.state === 'home')) {
       for (const P of parents) if (P.hugging) endHug(P);
+      clearHazards(hazards);
       setPhase('gathering');
     } else if (phase === 'gathering') {
       const home = parents.every(
@@ -459,6 +586,13 @@ new p5((p) => {
       );
       if (home) {
         familyHug = true;
+        completedOnce = true;
+        if (mode === 'screens') {
+          round++;
+          score += PARAMS.reunionBonus;
+          scoreAt = p.millis();
+          showBanner(`Familia unida · +${PARAMS.reunionBonus}`);
+        }
         setPhase('formed');
       }
     }
@@ -618,6 +752,8 @@ new p5((p) => {
 
   function drawBear(L, t) {
     const b = L.body;
+    // parpadea después de que un celular le quitó tiempo en familia
+    if (L.role === 'parent' && L.hitAt && t - L.hitAt < PARAMS.hitInvulnMs && Math.floor(t / 90) % 2) return;
     const speed = Math.hypot(b.velocity.x, b.velocity.y);
     const maxS = L.role === 'parent' ? PARAMS.parentMaxSpeed : PARAMS.cubMaxSpeed;
     const walk = Math.min(speed / maxS, 1);
@@ -647,6 +783,42 @@ new p5((p) => {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText('← ↑ → ↓  papá oso      ·      W A S D  mamá oso', p.width / 2, p.height - 24);
+    ctx.restore();
+  }
+
+  // Vida compartida en la esquina superior izquierda.
+  function drawLives() {
+    const ctx = p.drawingContext;
+    const size = Math.max(16, Math.min(p.width, p.height) * 0.035);
+    const m = size * 1.1;
+    ctx.save();
+    ctx.fillStyle = COLORS.ink;
+    ctx.font = fontAt(size * 0.85);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Tiempo en familia', m, m + size * 0.5);
+    for (let i = 0; i < PARAMS.lives; i++) {
+      drawHeart(ctx, m + size * 0.45 + i * size * 1.05, m + size * 1.65, size, i < lives);
+    }
+    ctx.restore();
+  }
+
+  function drawBanner(t) {
+    if (!banner) return;
+    const k = (t - banner.at) / 2200;
+    if (k >= 1) {
+      banner = null;
+      return;
+    }
+    const ctx = p.drawingContext;
+    const size = Math.max(22, Math.min(p.width, p.height) * 0.06);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, k / 0.15, (1 - k) / 0.25);
+    ctx.fillStyle = COLORS.ink;
+    ctx.font = fontAt(size);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(banner.text, p.width / 2, p.height * 0.25 - k * size * 0.4);
     ctx.restore();
   }
 
@@ -686,6 +858,17 @@ new p5((p) => {
     for (const C of cubs) updateCub(C);
     Engine.update(engine, 1000 / 60);
     updatePhase();
+    if (mode === 'screens' && phase === 'play') {
+      updateHazards(hazards, {
+        W: p.width, H: p.height, size: fontSize, round, t: p.millis(), parents,
+        avoid: [...parents.map((P) => P.body.position), { x: p.width / 2, y: p.height / 2 }],
+        onPhone, onGift,
+      });
+    }
+    // "Seguir jugando" aparece cuando la familia terminó su primer abrazo
+    ui.cont.hidden = !(
+      mode === 'classic' && completedOnce && phase === 'formed' && p.millis() - phaseStart > PARAMS.familyHugMs
+    );
 
     const t = p.millis();
     const ctx = p.drawingContext;
@@ -717,7 +900,10 @@ new p5((p) => {
     ctx.shadowBlur = 0;
     ctx.restore();
 
+    if (mode === 'screens') drawHazards(ctx, hazards, fontSize, t, fontAt);
     drawScore(t);
+    if (mode === 'screens') drawLives();
+    drawBanner(t);
     drawHint();
   };
 });

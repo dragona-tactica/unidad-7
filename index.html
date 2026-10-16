@@ -16,9 +16,57 @@
     }
     html, body { margin: 0; height: 100%; background: #e4001b; overflow: hidden; }
     canvas { display: block; }
+
+    .cta {
+      font: 28px "Loki Cola", "Yellowtail", cursive;
+      color: #fff;
+      background: transparent;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      padding: 8px 30px 10px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, transform 0.2s;
+    }
+    .cta:hover, .cta:focus-visible { background: #fff; color: #e4001b; transform: scale(1.05); outline: none; }
+    .cta[hidden] { display: none; }
+
+    #continue {
+      position: fixed;
+      left: 50%;
+      bottom: 22%;
+      transform: translateX(-50%);
+      animation: appear 0.6s ease-out;
+    }
+    #continue:hover { transform: translateX(-50%) scale(1.05); }
+
+    #over {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: rgba(120, 0, 14, 0.82);
+      color: #fff;
+      text-align: center;
+      font-family: "Loki Cola", "Yellowtail", cursive;
+      animation: appear 0.6s ease-out;
+    }
+    #over[hidden] { display: none; }
+    #over .title { font-size: clamp(30px, 5vw, 56px); line-height: 1.15; margin: 0; }
+    #over .score { font-size: clamp(22px, 3vw, 32px); margin: 0 0 8px; }
+
+    @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
   </style>
 </head>
 <body>
+  <button id="continue" class="cta" hidden>Seguir jugando</button>
+  <div id="over" hidden>
+    <p class="title">Las pantallas se llevaron<br />el tiempo en familia</p>
+    <p class="score" id="over-score"></p>
+    <button id="restart" class="cta">Volver a jugar</button>
+  </div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
