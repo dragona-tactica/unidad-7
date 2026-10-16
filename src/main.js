@@ -1,6 +1,7 @@
 import p5 from 'p5';
 import Matter from 'matter-js';
-import { WORD, ROLES, FAMILIES, FONT, COLORS, CONTROLS, PARAMS, FEATURES } from './config.js';
+import { FAMILIES, FONT, COLORS, CONTROLS, PARAMS, PARENT } from './config.js';
+import LOGO from './letters.json';
 import { createHazards, clearHazards, updateHazards, drawHazards, drawHeart, popup } from './hazards.js';
 
 const { Engine, Bodies, Body, Composite, Constraint, Events } = Matter;
@@ -11,6 +12,13 @@ const COLLIDE = { group: 0, category: CAT_BEAR, mask: CAT_WALL | CAT_BEAR };
 const GHOST = { group: 0, category: CAT_BEAR, mask: 0 };
 
 const fontAt = (size) => `${size}px ${FONT}`;
+
+// recortes de cada letra (tools/cut_letters.py); ruta relativa para GitHub Pages
+const images = LOGO.letters.map((d) => {
+  const img = new Image();
+  img.src = `letters/${d.file}`;
+  return img;
+});
 
 new p5((p) => {
   let engine;
@@ -39,6 +47,7 @@ new p5((p) => {
   let round = 0;
   let lives = PARAMS.lives;
   let invulnUntil = 0;
+  let shieldUntil = 0; // invulnerabilidad de la Coca-Cola
   let banner = null; // { text, at }
   let won = false;        // ya llegó la carta de Papá Noel en esta partida
   let winPending = false; // mostrarla cuando termine el abrazo grupal
@@ -81,6 +90,10 @@ new p5((p) => {
     Promise.allSettled([
       document.fonts.load(fontAt(80)),
       document.fonts.load('80px "Yellowtail"'),
+      ...images.map((img) => new Promise((done) => {
+        if (img.complete) done();
+        else img.onload = img.onerror = done;
+      })),
     ]).then(() => {
       ready = true;
       build();
@@ -99,126 +112,34 @@ new p5((p) => {
 
   // ---------------------------------------------------------------- layout
 
-  function measureWord(ctx) {
+  // La palabra sale del logo dibujado: cada letra conserva su posición en él
+  // y se escala para ocupar una fracción de la pantalla.
+  function measureWord() {
     const W = p.width;
     const H = p.height;
-    // la palabra ocupa una fracción del ancho y deja el resto para jugar
-    ctx.font = fontAt(100);
-    const per100 = ctx.measureText(WORD).width / 100;
-    fontSize = Math.min((W * PARAMS.wordWidth) / per100, H * PARAMS.wordHeight);
-    ctx.font = fontAt(fontSize);
-    const total = ctx.measureText(WORD).width;
-    const left = (W - total) / 2;
-    const baseline = H * 0.5 + fontSize * 0.22;
+    const s = Math.min((W * PARAMS.wordWidth) / LOGO.width, (H * PARAMS.wordHeight) / LOGO.height);
+    // tamaño de referencia para celulares, textos y brillos
+    fontSize = s * PARAMS.sizeRef;
+    const left = (W - LOGO.width * s) / 2;
+    const top = (H - LOGO.height * s) / 2;
 
-    return WORD.split('').map((ch, i) => {
-      const x0 = left + ctx.measureText(WORD.slice(0, i)).width;
-      const m = ctx.measureText(ch);
-      const gx0 = x0 - m.actualBoundingBoxLeft;
-      const gx1 = x0 + m.actualBoundingBoxRight;
-      const top = baseline - m.actualBoundingBoxAscent;
-      const bottom = baseline + m.actualBoundingBoxDescent;
-      const cx = (gx0 + gx1) / 2;
-      const cy = (top + bottom) / 2;
+    return LOGO.letters.map((d, i) => {
+      // el cuerpo de una C es el arco con la cabeza, no la cola larga
+      const anchor = d.role === 'parent' ? PARENT.anchor : { x: d.w / 2, y: d.h / 2 };
       return {
-        ch,
+        ch: d.ch,
         i,
-        role: ROLES[i],
-        home: { x: cx, y: cy },
-        // origen del fillText relativo al centro del glifo
-        ox: x0 - cx,
-        oy: baseline - cy,
-        bw: gx1 - gx0,
-        bh: bottom - top,
+        role: d.role,
+        img: images[i],
+        home: { x: left + (d.x + anchor.x) * s, y: top + (d.y + anchor.y) * s },
+        ax: anchor.x * s,
+        ay: anchor.y * s,
+        bw: d.w * s,
+        bh: d.h * s,
+        radius: (d.role === 'parent' ? PARENT.radius : Math.max(d.w, d.h) * 0.45) * s,
+        hugPoint: { x: PARENT.hug.x * s, y: PARENT.hug.y * s },
       };
     });
-  }
-
-  // Busca el hueco interior (la panza de la o / a) dibujando el glifo
-  // en un canvas aparte: lo que no es tinta y no se alcanza desde el
-  // borde es un hueco. De ahí salen hocico y orejas, para cualquier fuente.
-  function findFace(L) {
-    const pad = 4;
-    const w = Math.ceil(L.bw) + pad * 2;
-    const h = Math.ceil(L.bh) + pad * 2;
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    const g = c.getContext('2d', { willReadFrequently: true });
-    g.font = fontAt(fontSize);
-    g.fillStyle = '#000';
-    g.fillText(L.ch, L.ox + w / 2, L.oy + h / 2);
-    const a = g.getImageData(0, 0, w, h).data;
-    const ink = (i) => a[i * 4 + 3] > 100;
-    const N = w * h;
-    const neighbors = (i) => {
-      const x = i % w;
-      const out = [];
-      if (x > 0) out.push(i - 1);
-      if (x < w - 1) out.push(i + 1);
-      if (i >= w) out.push(i - w);
-      if (i < N - w) out.push(i + w);
-      return out;
-    };
-
-    // relleno desde los bordes: todo lo alcanzado es "afuera"
-    const outside = new Uint8Array(N);
-    const stack = [];
-    for (let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x);
-    for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
-    while (stack.length) {
-      const i = stack.pop();
-      if (outside[i] || ink(i)) continue;
-      outside[i] = 1;
-      stack.push(...neighbors(i));
-    }
-
-    // el hueco más grande
-    const visited = new Uint8Array(N);
-    let best = null;
-    for (let s0 = 0; s0 < N; s0++) {
-      if (outside[s0] || visited[s0] || ink(s0)) continue;
-      const q = [s0];
-      visited[s0] = 1;
-      let n = 0, sx = 0, sy = 0, x0 = w, x1 = 0, y0 = h, y1 = 0;
-      while (q.length) {
-        const i = q.pop();
-        const x = i % w;
-        const y = (i - x) / w;
-        n++; sx += x; sy += y;
-        x0 = Math.min(x0, x); x1 = Math.max(x1, x);
-        y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-        for (const j of neighbors(i)) {
-          if (visited[j] || outside[j] || ink(j)) continue;
-          visited[j] = 1;
-          q.push(j);
-        }
-      }
-      if (!best || n > best.n) best = { n, cx: sx / n, cy: sy / n, x0, x1, y0, y1 };
-    }
-    if (!best) return null;
-
-    // grosor del trazo: tinta que hay justo encima del hueco
-    const cx = Math.round(best.cx);
-    let stroke = 0;
-    for (let y = best.y0 - 1; y >= 0 && ink(y * w + cx); y--) stroke++;
-    stroke = Math.max(stroke, 2);
-
-    // las orejas van sobre el anillo que rodea al hueco, arriba a cada lado
-    const rx = (best.x1 - best.x0) / 2 + stroke * 0.6;
-    const ry = (best.y1 - best.y0) / 2 + stroke * 0.6;
-    const ex = (best.x0 + best.x1) / 2;
-    const ey = (best.y0 + best.y1) / 2;
-    const ear = (ang) => local(ex + Math.cos(ang) * rx, ey + Math.sin(ang) * ry);
-    const local = (x, y) => [x - w / 2, y - h / 2];
-    return {
-      holeW: best.x1 - best.x0,
-      holeH: best.y1 - best.y0,
-      stroke,
-      nose: local(best.cx, best.cy - (best.y1 - best.y0) * 0.08),
-      mouthEnd: local(best.cx, best.y1 - (best.y1 - best.y0) * 0.12),
-      ears: [ear(-Math.PI * 0.75), ear(-Math.PI * 0.25)],
-    };
   }
 
   function setWalls() {
@@ -239,21 +160,19 @@ new p5((p) => {
   // Al cambiar el tamaño de la ventana no se reinicia el juego: se recalcula
   // la palabra y cada oso conserva su estado y su posición proporcional.
   function relayout(oldW, oldH) {
-    const fresh = measureWord(p.drawingContext);
+    const fresh = measureWord();
     const sx = p.width / oldW;
     const sy = p.height / oldH;
     letters.forEach((L, i) => {
       const k = fresh[i].bh / L.bh;
-      Object.assign(L, {
-        home: fresh[i].home, ox: fresh[i].ox, oy: fresh[i].oy, bw: fresh[i].bw, bh: fresh[i].bh,
-      });
+      const { home, ax, ay, bw, bh, radius, hugPoint } = fresh[i];
+      Object.assign(L, { home, ax, ay, bw, bh, hugPoint });
       if (!L.body) return;
       Body.scale(L.body, k, k);
-      L.r *= k;
-      if (L.role === 'cub') L.face = findFace(L);
+      L.r = radius;
       const atHome = L.state === 'home' || (L.role === 'parent' && phase === 'formed');
       Body.setPosition(L.body, atHome ? L.home : { x: L.body.position.x * sx, y: L.body.position.y * sy });
-      if (L.hugConstraint) L.hugConstraint.pointA = { x: L.bw * 0.12, y: L.bh * 0.08 };
+      if (L.hugConstraint) L.hugConstraint.pointA = L.hugPoint;
     });
     setWalls();
   }
@@ -264,7 +183,7 @@ new p5((p) => {
     walls = [];
     setWalls();
 
-    letters = measureWord(p.drawingContext);
+    letters = measureWord();
     parents = [];
     cubs = [];
     let player = 0;
@@ -272,8 +191,7 @@ new p5((p) => {
     for (const L of letters) {
       L.wobble = Math.random() * Math.PI * 2;
       if (L.role === 'still') continue;
-      L.r = Math.max(L.bw, L.bh) * (L.role === 'parent' ? 0.4 : 0.48);
-      if (L.role === 'cub') L.face = findFace(L);
+      L.r = L.radius;
       L.body = Bodies.circle(L.home.x, L.home.y, L.r, {
         frictionAir: 0,
         friction: 0,
@@ -317,6 +235,7 @@ new p5((p) => {
         get mode() { return mode; },
         get round() { return round; },
         get paused() { return paused; },
+        get shieldUntil() { return shieldUntil; },
         cubSpeed,
       };
     }
@@ -384,12 +303,24 @@ new p5((p) => {
 
   function onPhone(P, ph) {
     const t = p.millis();
+    // con la Coca-Cola los celulares se rompen sin quitar tiempo en familia
+    if (t < shieldUntil) {
+      popup(hazards, ph.x, ph.y, '¡Fuera!', t);
+      return true;
+    }
     if (t < invulnUntil) return false;
     lives--;
     invulnUntil = t + PARAMS.hitInvulnMs;
     P.hitAt = t;
     popup(hazards, ph.x, ph.y, '−1', t);
     if (lives <= 0) gameOver();
+    return true;
+  }
+
+  function onCola(P, c) {
+    const t = p.millis();
+    shieldUntil = t + PARAMS.colaShieldMs;
+    popup(hazards, c.x, c.y, '¡Invulnerables!', t);
     return true;
   }
 
@@ -442,7 +373,7 @@ new p5((p) => {
     P.hugging = C;
     P.hugConstraint = Constraint.create({
       bodyA: P.body,
-      pointA: { x: P.bw * 0.12, y: P.bh * 0.08 },
+      pointA: P.hugPoint, // donde va la o en el logo: dentro de la curva de la C
       bodyB: C.body,
       length: 0,
       stiffness: 0.08,
@@ -637,111 +568,16 @@ new p5((p) => {
 
   // ---------------------------------------------------------------- dibujo
 
-  // Facciones de oso tomadas del boceto: orejas redondas detrás del glifo,
-  // hocico triangular con su línea en las crías y cabeza de perfil en la C.
-  function earAt(ctx, x, y, r) {
-    ctx.fillStyle = COLORS.ink;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = COLORS.earInner;
-    ctx.beginPath();
-    ctx.arc(x, y + r * 0.1, r * 0.52, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  function drawBack(ctx, L) {
-    const F = FEATURES[L.ch];
-    if (L.role === 'cub') {
-      if (!L.face) return;
-      const r = Math.max(L.face.holeW * F.ear, L.face.stroke * 0.9);
-      for (const [ex, ey] of L.face.ears) earAt(ctx, ex, ey, r);
-    } else {
-      const s = F.headSize * L.bh;
-      const hx = F.head[0] * L.bw;
-      const hy = F.head[1] * L.bh;
-      earAt(ctx, hx - s * 0.35, hy - s * 0.85, F.ear * L.bh);
-    }
-  }
-
-  function drawFront(ctx, L) {
-    const F = FEATURES[L.ch];
-    ctx.fillStyle = COLORS.ink;
-    ctx.strokeStyle = COLORS.ink;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-
-    if (L.role === 'cub') {
-      // oscuro como en el boceto, así se lee encima del trazo blanco
-      ctx.fillStyle = COLORS.feature;
-      ctx.strokeStyle = COLORS.feature;
-      if (!L.face) return;
-      const n = Math.max(L.face.holeW * F.noseSize, fontSize * 0.035);
-      const [nx, ny] = L.face.nose;
-      // hocico: triángulo de esquinas suaves, más ancho que alto
-      ctx.beginPath();
-      ctx.moveTo(nx - n * 0.5, ny - n * 0.2);
-      ctx.quadraticCurveTo(nx, ny - n * 0.36, nx + n * 0.5, ny - n * 0.2);
-      ctx.quadraticCurveTo(nx + n * 0.42, ny + n * 0.18, nx, ny + n * 0.3);
-      ctx.quadraticCurveTo(nx - n * 0.42, ny + n * 0.18, nx - n * 0.5, ny - n * 0.2);
-      ctx.fill();
-      // línea de la boca hasta el fondo de la panza
-      const [, my] = L.face.mouthEnd;
-      ctx.lineWidth = Math.max(n * 0.11, 1.2);
-      ctx.beginPath();
-      ctx.moveTo(nx, ny + n * 0.25);
-      ctx.lineTo(nx, Math.max(my, ny + n * 0.55));
-      ctx.stroke();
-      return;
-    }
-
-    // C: cabeza de perfil que mira a la derecha
-    const s = F.headSize * L.bh;
-    const hx = F.head[0] * L.bw;
-    const hy = F.head[1] * L.bh;
-    ctx.beginPath();
-    ctx.ellipse(hx, hy, s, s * 0.82, -0.15, 0, Math.PI * 2);
-    ctx.fill();
-    // hocico
-    ctx.beginPath();
-    ctx.ellipse(hx + s * 0.9, hy + s * 0.12, s * 0.62, s * 0.42, 0.1, 0, Math.PI * 2);
-    ctx.fill();
-    // nariz en la punta
-    ctx.fillStyle = COLORS.feature;
-    ctx.beginPath();
-    ctx.moveTo(hx + s * 1.38, hy - s * 0.12);
-    ctx.lineTo(hx + s * 1.56, hy + s * 0.02);
-    ctx.lineTo(hx + s * 1.36, hy + s * 0.14);
-    ctx.closePath();
-    ctx.fill();
-    // ojo cerrado y sonrisa
-    ctx.strokeStyle = COLORS.feature;
-    ctx.lineWidth = s * 0.09;
-    ctx.beginPath();
-    ctx.arc(hx + s * 0.3, hy - s * 0.22, s * 0.18, 0.15 * Math.PI, 0.85 * Math.PI);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(hx + s * 0.95, hy + s * 0.18, s * 0.3, 0.2 * Math.PI, 0.75 * Math.PI);
-    ctx.stroke();
-  }
-
+  // Cada letra es un recorte del logo con osos (public/letters). Se dibuja
+  // alrededor del centro de su cuerpo físico (ax, ay).
   function drawLetter(L, x, y, rot, sx, sy) {
     const ctx = p.drawingContext;
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(rot);
     ctx.scale(sx, sy);
-    const bear = L.role !== 'still';
-    if (bear) drawBack(ctx, L);
-    ctx.fillStyle = COLORS.ink;
-    ctx.font = fontAt(fontSize);
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillText(L.ch, L.ox, L.oy);
-    if (bear) {
-      ctx.shadowBlur = 0;
-      drawFront(ctx, L);
-    }
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(L.img, -L.ax, -L.ay, L.bw, L.bh);
     ctx.restore();
   }
 
@@ -789,6 +625,8 @@ new p5((p) => {
 
   function drawBear(L, t) {
     const b = L.body;
+    // aura de la Coca-Cola: alrededor de los osos que están jugando
+    if (L.role === 'parent' && L.played && t < shieldUntil) drawShield(L, t);
     // parpadea después de que un celular le quitó tiempo en familia
     if (L.role === 'parent' && L.hitAt && t - L.hitAt < PARAMS.hitInvulnMs && Math.floor(t / 90) % 2) return;
     const speed = Math.hypot(b.velocity.x, b.velocity.y);
@@ -820,6 +658,31 @@ new p5((p) => {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText('← ↑ → ↓  papá oso      ·      W A S D  mamá oso', p.width / 2, p.height - 24);
+    ctx.restore();
+  }
+
+  function drawShield(L, t) {
+    const ctx = p.drawingContext;
+    const left = (shieldUntil - t) / PARAMS.colaShieldMs;
+    // en el último tercio titila para avisar que se acaba
+    if (left < 0.33 && Math.floor(t / 80) % 2) return;
+    const { x, y } = L.body.position;
+    const r = L.r * (1.35 + 0.08 * Math.sin(t * 0.02));
+    ctx.save();
+    ctx.shadowBlur = 0;
+    const g = ctx.createRadialGradient(x, y, r * 0.5, x, y, r);
+    g.addColorStop(0, 'rgba(255, 236, 170, 0)');
+    g.addColorStop(0.75, 'rgba(255, 236, 170, 0.35)');
+    g.addColorStop(1, 'rgba(255, 236, 170, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = COLORS.shield;
+    ctx.lineWidth = Math.max(2, L.r * 0.06);
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.88, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -901,7 +764,7 @@ new p5((p) => {
         parents: playingParents(),
         targets: playingParents().map((P) => P.body.position),
         avoid: [...parents.map((P) => P.body.position), { x: p.width / 2, y: p.height / 2 }],
-        onPhone, onGift,
+        onPhone, onGift, onCola,
       });
     }
     // la carta de Papá Noel llega cuando termina el abrazo del nivel ganador

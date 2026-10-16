@@ -1,12 +1,18 @@
-export const WORD = 'Coca-Cola';
+// Las letras, sus roles y posiciones vienen de src/letters.json, generado
+// por tools/cut_letters.py a partir de assets/coca-cola-osos.png.
 
-// Rol de cada letra. Las crías (o, a) son osos pequeños, las dos C son
-// papá y mamá oso. Las letras sueltas por ahora no participan.
-export const ROLES = ['parent', 'cub', 'still', 'cub', 'still', 'parent', 'cub', 'still', 'cub'];
+// Las dos familias que se abrazan al reunirse (índices en letters.json):
+// C o c a  y  C o l a.
+export const FAMILIES = [[0, 1, 2, 3], [4, 5, 6, 7]];
 
-// Las dos familias que se abrazan al reunirse (índices de WORD):
-// C o c a  y  C o l a. El guion queda entre ambas.
-export const FAMILIES = [[0, 1, 2, 3], [5, 6, 7, 8]];
+// Cuerpo de papá y mamá (las C), en píxeles del dibujo original:
+// el centro del arco con la cabeza, su radio y dónde queda la cría
+// abrazada (la posición de la o en el logo, relativa a ese centro).
+export const PARENT = {
+  anchor: { x: 60, y: 88 },
+  radius: 52,
+  hug: { x: 38, y: 11 },
+};
 
 export const FONT = '"Loki Cola", "Yellowtail", cursive';
 
@@ -14,21 +20,12 @@ export const COLORS = {
   bg: '#e4001b',
   ink: '#ffffff',
   hint: 'rgba(255,255,255,0.55)',
-  earInner: '#f6b3b8',
   feature: '#7a0010',
   phone: '#1b0b10',
   screen: '#8fd8ff',
   screenGlow: 'rgba(120, 210, 255, 0.85)',
-};
-
-// Facciones de oso. En las crías la posición se calcula sola a partir del
-// hueco del glifo (tamaños relativos a su ancho); la cabeza de la C se ubica
-// a mano (fracciones de su caja, 0,0 = centro) y depende de la tipografía.
-export const FEATURES = {
-  o: { ear: 0.36, noseSize: 0.5 },
-  a: { ear: 0.36, noseSize: 0.5 },
-  // C: cabeza de perfil en el remate superior, mirando a la derecha
-  C: { head: [0.18, -0.36], headSize: 0.2, ear: 0.075 },
+  colaGlass: '#3a0f12',
+  shield: 'rgba(255, 236, 170, 0.9)',
 };
 
 // Controles: jugador 1 = flechas (primera C), jugador 2 = WASD (segunda C).
@@ -39,7 +36,8 @@ export const CONTROLS = [
 
 export const PARAMS = {
   wordWidth: 0.34,        // ancho de la palabra respecto a la pantalla
-  wordHeight: 0.16,       // tope del tamaño de letra respecto al alto
+  wordHeight: 0.3,        // tope del alto de la palabra respecto a la pantalla
+  sizeRef: 135,           // escala → tamaño de referencia de celulares, textos y brillos
   parentAccel: 0.9,       // aceleración por frame al mantener una tecla
   parentMaxSpeed: 7.5,
   parentDamping: 0.88,
@@ -63,7 +61,10 @@ export const PARAMS = {
   phoneSpeedUpPerLevel: 0.3, // +30 % de velocidad de los celulares por nivel
   phoneMaxSpeed: 6.5,     // nunca más rápidos que papá y mamá (7.5)
   phoneTurn: 0.07,        // qué tan cerrado giran al perseguir
-  winLevel: 2,            // al superar este nivel llega la carta de Papá Noel
+  winLevel: 2,
+  colaLevel: 2,            // nivel con la única Coca-Cola de invulnerabilidad
+  colaDelayMs: 4000,      // aparece este tiempo después de empezar el nivel
+  colaShieldMs: 1500,     // cuánto dura la invulnerabilidad            // al superar este nivel llega la carta de Papá Noel
   phonesBase: 2,          // celulares simultáneos en la primera ronda (+1 por ronda)
   phoneEveryMs: 3200,
   phoneLifeMs: 12000,

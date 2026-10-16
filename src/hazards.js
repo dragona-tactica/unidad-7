@@ -3,12 +3,16 @@
 import { COLORS, PARAMS } from './config.js';
 
 export function createHazards() {
-  return { phones: [], gifts: [], popups: [], nextPhone: 0, nextGift: 0 };
+  // cola: la única Coca-Cola del nivel 2 (invulnerabilidad)
+  return { phones: [], gifts: [], popups: [], nextPhone: 0, nextGift: 0, cola: null, colaAt: 0, colaSpawned: false };
 }
 
 export function clearHazards(h) {
   h.phones.length = 0;
   h.gifts.length = 0;
+  h.cola = null;
+  h.colaAt = 0;
+  h.colaSpawned = false;
 }
 
 export function popup(h, x, y, text, t) {
@@ -69,7 +73,20 @@ function nearest(points, from) {
 }
 
 // `targets`: posiciones de los osos que los celulares persiguen.
-export function updateHazards(h, { W, H, size, round, t, parents, targets, avoid, onPhone, onGift }) {
+export function updateHazards(h, { W, H, size, round, t, parents, targets, avoid, onPhone, onGift, onCola }) {
+  // una sola Coca-Cola en el nivel indicado, un rato después de empezar
+  if (round === PARAMS.colaLevel - 1 && !h.colaSpawned) {
+    if (!h.colaAt) h.colaAt = t + PARAMS.colaDelayMs;
+    if (t >= h.colaAt) {
+      const before = h.gifts.length;
+      spawnGift(h, W, H, size, avoid, t);
+      if (h.gifts.length > before) {
+        h.cola = h.gifts.pop();
+        h.colaSpawned = true;
+      }
+    }
+  }
+
   const maxPhones = PARAMS.phonesBase + round;
   const every = PARAMS.phoneEveryMs / (1 + round * 0.25);
   if (t >= h.nextPhone) {
@@ -115,6 +132,7 @@ export function updateHazards(h, { W, H, size, round, t, parents, targets, avoid
     const { x, y } = P.body.position;
     h.phones = h.phones.filter((ph) => !(Math.hypot(ph.x - x, ph.y - y) < P.r * 0.8 + ph.r && onPhone(P, ph)));
     h.gifts = h.gifts.filter((g) => !(Math.hypot(g.x - x, g.y - y) < P.r * 0.8 + g.r && onGift(P, g)));
+    if (h.cola && Math.hypot(h.cola.x - x, h.cola.y - y) < P.r * 0.8 + h.cola.r && onCola(P, h.cola)) h.cola = null;
   }
   h.popups = h.popups.filter((pp) => t - pp.born < 1200);
 }
@@ -126,6 +144,7 @@ function fade(age, life) {
 
 export function drawHazards(ctx, h, size, t, font) {
   for (const g of h.gifts) drawGift(ctx, g, size, t, fade(t - g.born, PARAMS.giftLifeMs));
+  if (h.cola) drawCola(ctx, h.cola, size, t);
   for (const ph of h.phones) drawPhone(ctx, ph, size, t, fade(t - ph.born, PARAMS.phoneLifeMs));
 
   ctx.save();
@@ -163,6 +182,59 @@ function drawPhone(ctx, ph, size, t, alpha) {
   ctx.beginPath();
   ctx.roundRect(-w / 2 + pad, -hgt / 2 + pad * 1.6, w - pad * 2, hgt - pad * 3.2, w * 0.1);
   ctx.fill();
+  ctx.restore();
+}
+
+// botella de Coca-Cola: vidrio oscuro, etiqueta roja con la onda blanca
+function drawCola(ctx, c, size, t) {
+  const h = size * 0.72;
+  const w = h * 0.34;
+  const bob = Math.sin(t * 0.004) * size * 0.06;
+  const pulse = 0.6 + 0.4 * Math.sin(t * 0.008);
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, (t - c.born) / 400);
+  ctx.translate(c.x, c.y + bob);
+  ctx.rotate(Math.sin(t * 0.003) * 0.12);
+
+  // destello alrededor: es especial
+  ctx.shadowColor = `rgba(255, 236, 170, ${0.9 * pulse})`;
+  ctx.shadowBlur = size * 0.5;
+  ctx.fillStyle = COLORS.colaGlass;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.18, -h / 2 + h * 0.08);
+  ctx.lineTo(w * 0.18, -h / 2 + h * 0.08);
+  ctx.bezierCurveTo(w * 0.18, -h * 0.18, w * 0.55, -h * 0.12, w * 0.5, h * 0.05);
+  ctx.bezierCurveTo(w * 0.42, h * 0.18, w * 0.52, h * 0.3, w * 0.5, h * 0.44);
+  ctx.quadraticCurveTo(w * 0.48, h / 2, 0, h / 2);
+  ctx.quadraticCurveTo(-w * 0.48, h / 2, -w * 0.5, h * 0.44);
+  ctx.bezierCurveTo(-w * 0.52, h * 0.3, -w * 0.42, h * 0.18, -w * 0.5, h * 0.05);
+  ctx.bezierCurveTo(-w * 0.55, -h * 0.12, -w * 0.18, -h * 0.18, -w * 0.18, -h / 2 + h * 0.08);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // tapa
+  ctx.fillStyle = COLORS.bg;
+  ctx.beginPath();
+  ctx.roundRect(-w * 0.22, -h / 2, w * 0.44, h * 0.09, w * 0.06);
+  ctx.fill();
+  // etiqueta
+  ctx.fillRect(-w * 0.5, h * 0.02, w, h * 0.2);
+  ctx.strokeStyle = COLORS.ink;
+  ctx.lineWidth = h * 0.025;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.45, h * 0.15);
+  ctx.quadraticCurveTo(0, h * 0.04, w * 0.45, h * 0.1);
+  ctx.stroke();
+  // brillo del vidrio
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = w * 0.08;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.28, -h * 0.08);
+  ctx.lineTo(-w * 0.3, -h * 0.0);
+  ctx.moveTo(-w * 0.3, h * 0.28);
+  ctx.lineTo(-w * 0.3, h * 0.4);
+  ctx.stroke();
   ctx.restore();
 }
 

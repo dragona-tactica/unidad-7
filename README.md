@@ -27,6 +27,8 @@ npm run dev
 
 - `src/config.js`: reglas y parámetros (velocidades, tiempos, tamaño de la palabra).
 - `src/main.js`: física (Matter.js), steering de las crías y dibujo (p5.js).
-- Fuente: si existe `public/fonts/LokiCola.ttf` se usa; si no, Yellowtail de Google Fonts.
+- Letras: recortes de `assets/coca-cola-osos.png`. Si cambias ese dibujo, corre
+  `python3 tools/cut_letters.py` para regenerar `public/letters/` y `src/letters.json`.
+- Textos (marcador, carteles): Loki Cola si existe `public/fonts/LokiCola.ttf`; si no, Yellowtail.
 
 Cada push a `main` se publica en GitHub Pages con `.github/workflows/deploy.yml`.
