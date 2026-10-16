@@ -14,6 +14,10 @@ export const PARENT = {
   hug: { x: 38, y: 11 },
 };
 
+// Moño de mamá osa (segunda C), en píxeles del dibujo original: junto a
+// su oreja, sobre el borde de la cabeza.
+export const BOW = { letter: 4, x: 102, y: 10, size: 32, angle: -0.35 };
+
 export const FONT = '"Loki Cola", "Yellowtail", cursive';
 
 export const COLORS = {
@@ -26,9 +30,11 @@ export const COLORS = {
   screenGlow: 'rgba(120, 210, 255, 0.85)',
   colaGlass: '#3a0f12',
   shield: 'rgba(255, 236, 170, 0.9)',
+  bow: '#e4001b',
+  bowKnot: '#a8001a',
 };
 
-// Controles: jugador 1 = flechas (primera C), jugador 2 = WASD (segunda C).
+// Controles: jugador 1 = flechas (papá, primera C), jugador 2 = WASD (mamá, segunda C).
 export const CONTROLS = [
   { up: 38, down: 40, left: 37, right: 39 },
   { up: 87, down: 83, left: 65, right: 68 },
@@ -61,10 +67,10 @@ export const PARAMS = {
   phoneSpeedUpPerLevel: 0.3, // +30 % de velocidad de los celulares por nivel
   phoneMaxSpeed: 6.5,     // nunca más rápidos que papá y mamá (7.5)
   phoneTurn: 0.07,        // qué tan cerrado giran al perseguir
-  winLevel: 2,
+  winLevel: 2,            // al superar este nivel llega la carta de Papá Oso
   colaLevel: 2,            // nivel con la única Coca-Cola de invulnerabilidad
   colaDelayMs: 4000,      // aparece este tiempo después de empezar el nivel
-  colaShieldMs: 1500,     // cuánto dura la invulnerabilidad            // al superar este nivel llega la carta de Papá Noel
+  colaShieldMs: 1500,     // cuánto dura la invulnerabilidad
   phonesBase: 2,          // celulares simultáneos en la primera ronda (+1 por ronda)
   phoneEveryMs: 3200,
   phoneLifeMs: 12000,

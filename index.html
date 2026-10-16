@@ -57,7 +57,7 @@
     #over .title { font-size: clamp(30px, 5vw, 56px); line-height: 1.15; margin: 0; }
     #over .score { font-size: clamp(22px, 3vw, 32px); margin: 0 0 8px; }
 
-    /* Carta de Papá Noel */
+    /* Carta de Papá Oso */
     #win {
       position: fixed;
       inset: 0;
@@ -70,6 +70,7 @@
     }
     #win[hidden] { display: none; }
     .letter {
+      position: relative;
       display: flex;
       gap: 28px;
       align-items: center;
@@ -83,7 +84,19 @@
       font-family: "Loki Cola", "Yellowtail", cursive;
       animation: drop 0.8s cubic-bezier(.2, 1.4, .4, 1);
     }
-    .letter svg { flex: none; width: 96px; height: auto; }
+    .letter .bottle { flex: none; width: 82px; height: auto; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.25)); }
+    /* calcomanía pegada en la esquina */
+    .letter .sticker {
+      position: absolute;
+      top: -64px;
+      right: -46px;
+      width: clamp(110px, 20vw, 170px);
+      transform: rotate(9deg);
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+      animation: stick 0.5s 0.6s cubic-bezier(.3, 1.6, .5, 1) both;
+      pointer-events: none;
+    }
+    .letter h2, .letter h2 + p { padding-right: 84px; }
     .letter h2 { margin: 0 0 6px; font-size: clamp(28px, 4vw, 40px); color: #e4001b; font-weight: normal; }
     .letter p { margin: 0 0 10px; font-size: clamp(18px, 2.4vw, 23px); line-height: 1.3; }
     .letter .sign { text-align: right; font-size: clamp(22px, 3vw, 30px); margin-top: 6px; }
@@ -93,9 +106,13 @@
     .letter .cta:hover, .letter .cta:focus-visible { background: #e4001b; color: #fff; }
     @media (max-width: 520px) {
       .letter { flex-direction: column; text-align: center; }
+      .letter .sticker { top: -40px; right: -12px; width: 96px; }
+      .letter .bottle { width: 54px; }
+      .letter h2, .letter h2 + p { padding-right: 0; }
       .letter .sign { text-align: center; }
       .letter .actions { justify-content: center; }
     }
+    @keyframes stick { from { transform: rotate(30deg) scale(1.6); opacity: 0; } to { transform: rotate(9deg) scale(1); opacity: 1; } }
     @keyframes drop { from { transform: translateY(-40px) rotate(-3deg); opacity: 0; } to { transform: none; opacity: 1; } }
 
     @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
@@ -110,22 +127,12 @@
   </div>
   <div id="win" hidden>
     <div class="letter">
-      <!-- botella de 1,5 L -->
-      <svg viewBox="0 0 60 200" aria-label="Botella de Coca-Cola de litro y medio">
-        <rect x="22" y="2" width="16" height="12" rx="2" fill="#e4001b" />
-        <path d="M24 14h12v10c0 6 10 14 12 24 2 9 -1 14 -1 20 0 7 3 12 3 22v88c0 9 -6 14 -14 14H24c-8 0 -14 -5 -14 -14V90c0 -10 3 -15 3 -22 0 -6 -3 -11 -1 -20 2 -10 12 -18 12 -24z"
-              fill="#3a0f12" stroke="#2a0a0d" stroke-width="1.5" />
-        <path d="M20 40c-3 6 -4 12 -3 18" stroke="rgba(255,255,255,0.35)" stroke-width="3" fill="none" stroke-linecap="round" />
-        <rect x="9" y="92" width="42" height="42" fill="#e4001b" />
-        <path d="M9 124c10 -8 28 6 42 -6v6c-14 10 -30 -2 -42 6z" fill="#fff" />
-        <text x="30" y="113" text-anchor="middle" font-size="9" fill="#fff" font-family="'Loki Cola', 'Yellowtail', cursive">Coca-Cola</text>
-        <text x="30" y="150" text-anchor="middle" font-size="7" fill="rgba(255,255,255,0.7)" font-family="system-ui, sans-serif">1,5 L</text>
-        <path d="M14 168h32M14 176h32M14 184h32" stroke="rgba(255,255,255,0.18)" stroke-width="2" />
-      </svg>
+      <img class="bottle" src="img/botella.png" alt="Botella de Coca-Cola de litro y medio" />
+      <img class="sticker" src="img/oso-sticker.png" alt="" />
       <div>
         <h2>¡Felicidades, familia!</h2>
         <p>Superaron las pantallas y se mantuvieron juntos. Ganaron una Coca-Cola de litro y medio para que celebren las fiestas en familia.</p>
-        <p class="sign">Con cariño, Papá Noel</p>
+        <p class="sign">Con cariño, Papá Oso</p>
         <p class="score" id="win-score"></p>
         <div class="actions">
           <button id="win-continue" class="cta">Seguir jugando</button>

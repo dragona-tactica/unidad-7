@@ -1,6 +1,6 @@
 import p5 from 'p5';
 import Matter from 'matter-js';
-import { FAMILIES, FONT, COLORS, CONTROLS, PARAMS, PARENT } from './config.js';
+import { FAMILIES, FONT, COLORS, CONTROLS, PARAMS, PARENT, BOW } from './config.js';
 import LOGO from './letters.json';
 import { createHazards, clearHazards, updateHazards, drawHazards, drawHeart, popup } from './hazards.js';
 
@@ -49,7 +49,7 @@ new p5((p) => {
   let invulnUntil = 0;
   let shieldUntil = 0; // invulnerabilidad de la Coca-Cola
   let banner = null; // { text, at }
-  let won = false;        // ya llegó la carta de Papá Noel en esta partida
+  let won = false;        // ya llegó la carta de Papá Oso en esta partida
   let winPending = false; // mostrarla cuando termine el abrazo grupal
   let paused = false;     // mientras se lee la carta
   const hazards = createHazards();
@@ -136,6 +136,7 @@ new p5((p) => {
         ay: anchor.y * s,
         bw: d.w * s,
         bh: d.h * s,
+        scale: s,
         radius: (d.role === 'parent' ? PARENT.radius : Math.max(d.w, d.h) * 0.45) * s,
         hugPoint: { x: PARENT.hug.x * s, y: PARENT.hug.y * s },
       };
@@ -165,8 +166,8 @@ new p5((p) => {
     const sy = p.height / oldH;
     letters.forEach((L, i) => {
       const k = fresh[i].bh / L.bh;
-      const { home, ax, ay, bw, bh, radius, hugPoint } = fresh[i];
-      Object.assign(L, { home, ax, ay, bw, bh, hugPoint });
+      const { home, ax, ay, bw, bh, scale, radius, hugPoint } = fresh[i];
+      Object.assign(L, { home, ax, ay, bw, bh, scale, hugPoint });
       if (!L.body) return;
       Body.scale(L.body, k, k);
       L.r = radius;
@@ -578,6 +579,38 @@ new p5((p) => {
     ctx.scale(sx, sy);
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(L.img, -L.ax, -L.ay, L.bw, L.bh);
+    if (L.i === BOW.letter) drawBow(ctx, L);
+    ctx.restore();
+  }
+
+  // Moño de mamá osa, para diferenciarla de papá. Rojo Coca-Cola con borde
+  // blanco: se lee tanto sobre su cabeza blanca como sobre el fondo rojo.
+  function drawBow(ctx, L) {
+    const s = L.scale;
+    const u = BOW.size * s;
+    ctx.save();
+    ctx.translate(-L.ax + BOW.x * s, -L.ay + BOW.y * s);
+    ctx.rotate(BOW.angle);
+    ctx.shadowBlur = 0;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(1.5, u * 0.09);
+    ctx.strokeStyle = COLORS.ink;
+    ctx.fillStyle = COLORS.bow;
+    for (const side of [-1, 1]) {
+      // cada lazo: un triángulo redondeado que sale del nudo
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(side * u * 0.35, -u * 0.55, side * u * 0.55, -u * 0.25);
+      ctx.quadraticCurveTo(side * u * 0.65, u * 0.05, side * u * 0.55, u * 0.3);
+      ctx.quadraticCurveTo(side * u * 0.35, u * 0.5, 0, 0);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = COLORS.bowKnot;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, u * 0.14, u * 0.17, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -657,7 +690,7 @@ new p5((p) => {
     ctx.font = '500 14px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('← ↑ → ↓  papá oso      ·      W A S D  mamá oso', p.width / 2, p.height - 24);
+    ctx.fillText('← ↑ → ↓  papá oso      ·      W A S D  mamá osa', p.width / 2, p.height - 24);
     ctx.restore();
   }
 
@@ -767,7 +800,7 @@ new p5((p) => {
         onPhone, onGift, onCola,
       });
     }
-    // la carta de Papá Noel llega cuando termina el abrazo del nivel ganador
+    // la carta de Papá Oso llega cuando termina el abrazo del nivel ganador
     if (winPending && phase === 'formed' && p.millis() - phaseStart > PARAMS.familyHugMs) {
       winPending = false;
       paused = true;

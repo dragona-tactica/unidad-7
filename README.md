@@ -3,7 +3,7 @@
 Unidad 7 de Simulación — *Word as a Playable System*.
 
 Un sistema tipográfico jugable con las letras de **Coca-Cola**. Las dos C son
-papá y mamá oso polar, y las o y las a son sus crías. Las crías se escapan,
+papá oso y mamá osa polar, y las o y las a son sus crías. Las crías se escapan,
 papá y mamá las persiguen y las abrazan, y cuando la familia vuelve a estar
 completa se abraza y se forma otra vez la palabra.
 
@@ -14,7 +14,7 @@ completa se abraza y se forma otra vez la palabra.
 | Jugador | Teclas | Personaje |
 | --- | --- | --- |
 | 1 | ← ↑ → ↓ | papá oso (primera C) |
-| 2 | W A S D | mamá oso (segunda C) |
+| 2 | W A S D | mamá osa (segunda C, con moño) |
 
 Se puede jugar con una o con dos personas.
 
