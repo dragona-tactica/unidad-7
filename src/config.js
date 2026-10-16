@@ -59,7 +59,11 @@ export const PARAMS = {
   lives: 5,               // tiempo en familia, compartido por papá y mamá
   speedUpPerRound: 0.15,  // cuánto más rápido corren las crías en cada ronda
   maxSpeedUp: 2.2,
-  phoneSpeed: 1.8,
+  phoneSpeed: 2.2,
+  phoneSpeedUpPerLevel: 0.3, // +30 % de velocidad de los celulares por nivel
+  phoneMaxSpeed: 6.5,     // nunca más rápidos que papá y mamá (7.5)
+  phoneTurn: 0.07,        // qué tan cerrado giran al perseguir
+  winLevel: 2,            // al superar este nivel llega la carta de Papá Noel
   phonesBase: 2,          // celulares simultáneos en la primera ronda (+1 por ronda)
   phoneEveryMs: 3200,
   phoneLifeMs: 12000,

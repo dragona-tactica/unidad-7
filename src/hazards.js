@@ -26,7 +26,7 @@ function spawnPhone(h, W, H, size, round, t) {
   const tx = rand(W * 0.2, W * 0.8);
   const ty = rand(H * 0.2, H * 0.8);
   const d = Math.hypot(tx - x, ty - y);
-  const speed = PARAMS.phoneSpeed * (1 + round * 0.15);
+  const speed = phoneSpeed(round);
   h.phones.push({
     x, y,
     vx: ((tx - x) / d) * speed,
@@ -51,7 +51,25 @@ function spawnGift(h, W, H, size, avoid, t) {
 
 // Avanza celulares y regalos. `onPhone(P, phone)` y `onGift(P, gift)` se
 // llaman cuando un papá los toca; devuelven true si el objeto se consume.
-export function updateHazards(h, { W, H, size, round, t, parents, avoid, onPhone, onGift }) {
+// cada nivel los celulares son más rápidos
+export const phoneSpeed = (round) =>
+  Math.min(PARAMS.phoneSpeed * (1 + round * PARAMS.phoneSpeedUpPerLevel), PARAMS.phoneMaxSpeed);
+
+function nearest(points, from) {
+  let best = null;
+  let bd = Infinity;
+  for (const pt of points) {
+    const d = Math.hypot(pt.x - from.x, pt.y - from.y);
+    if (d < bd) {
+      bd = d;
+      best = pt;
+    }
+  }
+  return best;
+}
+
+// `targets`: posiciones de los osos que los celulares persiguen.
+export function updateHazards(h, { W, H, size, round, t, parents, targets, avoid, onPhone, onGift }) {
   const maxPhones = PARAMS.phonesBase + round;
   const every = PARAMS.phoneEveryMs / (1 + round * 0.25);
   if (t >= h.nextPhone) {
@@ -63,13 +81,29 @@ export function updateHazards(h, { W, H, size, round, t, parents, avoid, onPhone
     h.nextGift = t + PARAMS.giftEveryMs * rand(0.8, 1.3);
   }
 
+  // Los celulares persiguen al oso grande más cercano (seek). El giro está
+  // limitado para que hagan curvas y se puedan esquivar.
+  const speed = phoneSpeed(round);
+  const turn = PARAMS.phoneTurn * (1 + round * 0.2);
   for (const ph of h.phones) {
+    const prey = nearest(targets, ph);
+    if (prey && t - ph.born > 600) {
+      const ox = prey.x - ph.x;
+      const oy = prey.y - ph.y;
+      const d = Math.hypot(ox, oy) || 1;
+      let fx = (ox / d) * speed - ph.vx;
+      let fy = (oy / d) * speed - ph.vy;
+      const f = Math.hypot(fx, fy);
+      if (f > turn) {
+        fx *= turn / f;
+        fy *= turn / f;
+      }
+      ph.vx += fx;
+      ph.vy += fy;
+    }
     ph.x += ph.vx;
     ph.y += ph.vy;
-    // rebota en los bordes una vez que entró en pantalla
     if (t - ph.born > 1500) {
-      if (ph.x < ph.r || ph.x > W - ph.r) ph.vx *= -1;
-      if (ph.y < ph.r || ph.y > H - ph.r) ph.vy *= -1;
       ph.x = Math.min(Math.max(ph.x, ph.r), W - ph.r);
       ph.y = Math.min(Math.max(ph.y, ph.r), H - ph.r);
     }

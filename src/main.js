@@ -40,6 +40,9 @@ new p5((p) => {
   let lives = PARAMS.lives;
   let invulnUntil = 0;
   let banner = null; // { text, at }
+  let won = false;        // ya llegó la carta de Papá Noel en esta partida
+  let winPending = false; // mostrarla cuando termine el abrazo grupal
+  let paused = false;     // mientras se lee la carta
   const hazards = createHazards();
 
   const ui = {
@@ -47,7 +50,21 @@ new p5((p) => {
     over: document.getElementById('over'),
     overScore: document.getElementById('over-score'),
     restart: document.getElementById('restart'),
+    win: document.getElementById('win'),
+    winContinue: document.getElementById('win-continue'),
+    winRestart: document.getElementById('win-restart'),
   };
+  ui.winContinue.addEventListener('click', () => {
+    ui.winContinue.blur();
+    ui.win.hidden = true;
+    paused = false;
+  });
+  ui.winRestart.addEventListener('click', () => {
+    ui.winRestart.blur();
+    ui.win.hidden = true;
+    paused = false;
+    restart();
+  });
   ui.cont.addEventListener('click', () => {
     ui.cont.blur();
     startScreens();
@@ -299,6 +316,7 @@ new p5((p) => {
         get lives() { return lives; },
         get mode() { return mode; },
         get round() { return round; },
+        get paused() { return paused; },
         cubSpeed,
       };
     }
@@ -321,7 +339,7 @@ new p5((p) => {
     lives = PARAMS.lives;
     hazards.nextPhone = p.millis() + 1500;
     hazards.nextGift = p.millis() + PARAMS.giftEveryMs;
-    showBanner('Cuidado con las pantallas');
+    showBanner('Nivel 1 · Cuidado con las pantallas');
     scatter();
   }
 
@@ -349,12 +367,22 @@ new p5((p) => {
 
   function restart() {
     ui.over.hidden = true;
+    won = false;
+    winPending = false;
     resetFamily();
     score = 0;
     familyHug = false;
     clearHazards(hazards);
     setPhase('formed');
     startScreens();
+  }
+
+  // Los celulares persiguen a los osos que se están jugando. Si juega una
+  // sola persona, el oso quieto en la palabra no es perseguido.
+  function chaseTargets() {
+    const t = p.millis();
+    const active = parents.filter((P) => P.lastInput && t - P.lastInput < 8000);
+    return (active.length ? active : parents).map((P) => P.body.position);
   }
 
   function onPhone(P, ph) {
@@ -395,6 +423,7 @@ new p5((p) => {
   // de golpe; por eso salen "fantasma" y se vuelven sólidas un momento después.
   function scatter() {
     familyHug = false;
+    if (mode === 'screens' && round > 0) showBanner(`Nivel ${round + 1}`);
     for (const C of cubs) {
       C.state = 'free';
       C.solidAt = p.millis() + PARAMS.escapeGraceMs;
@@ -439,6 +468,11 @@ new p5((p) => {
       Body.setVelocity(b, { x: b.velocity.x * 0.85, y: b.velocity.y * 0.85 });
       return;
     }
+    if (paused) {
+      Body.setPosition(b, P.home);
+      Body.setVelocity(b, { x: 0, y: 0 });
+      return;
+    }
     if (phase === 'gathering') {
       arrive(b, P.home, PARAMS.parentMaxSpeed * 0.8, 0.6);
       return;
@@ -451,6 +485,7 @@ new p5((p) => {
     const k = CONTROLS[P.player];
     const ax = (p.keyIsDown(k.right) ? 1 : 0) - (p.keyIsDown(k.left) ? 1 : 0);
     const ay = (p.keyIsDown(k.down) ? 1 : 0) - (p.keyIsDown(k.up) ? 1 : 0);
+    if (ax || ay) P.lastInput = p.millis();
     let vx = b.velocity.x * PARAMS.parentDamping + ax * PARAMS.parentAccel;
     let vy = b.velocity.y * PARAMS.parentDamping + ay * PARAMS.parentAccel;
     const s = Math.hypot(vx, vy);
@@ -571,6 +606,7 @@ new p5((p) => {
   const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
   function updatePhase() {
+    if (paused) return;
     if (phase === 'formed' && p.millis() - phaseStart >= holdMs()) {
       const left = parents.some(
         (P) => Math.hypot(P.body.position.x - P.home.x, P.body.position.y - P.home.y) > PARAMS.leaveDistance,
@@ -592,6 +628,10 @@ new p5((p) => {
           score += PARAMS.reunionBonus;
           scoreAt = p.millis();
           showBanner(`Familia unida · +${PARAMS.reunionBonus}`);
+          if (round >= PARAMS.winLevel && !won) {
+            won = true;
+            winPending = true;
+          }
         }
         setPhase('formed');
       }
@@ -796,7 +836,7 @@ new p5((p) => {
     ctx.font = fontAt(size * 0.85);
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Tiempo en familia', m, m + size * 0.5);
+    ctx.fillText(`Nivel ${round + 1}  ·  Tiempo en familia`, m, m + size * 0.5);
     for (let i = 0; i < PARAMS.lives; i++) {
       drawHeart(ctx, m + size * 0.45 + i * size * 1.05, m + size * 1.65, size, i < lives);
     }
@@ -860,10 +900,17 @@ new p5((p) => {
     updatePhase();
     if (mode === 'screens' && phase === 'play') {
       updateHazards(hazards, {
-        W: p.width, H: p.height, size: fontSize, round, t: p.millis(), parents,
+        W: p.width, H: p.height, size: fontSize, round, t: p.millis(), parents, targets: chaseTargets(),
         avoid: [...parents.map((P) => P.body.position), { x: p.width / 2, y: p.height / 2 }],
         onPhone, onGift,
       });
+    }
+    // la carta de Papá Noel llega cuando termina el abrazo del nivel ganador
+    if (winPending && phase === 'formed' && p.millis() - phaseStart > PARAMS.familyHugMs) {
+      winPending = false;
+      paused = true;
+      document.getElementById('win-score').textContent = `Puntos ${score}`;
+      ui.win.hidden = false;
     }
     // "Seguir jugando" aparece cuando la familia terminó su primer abrazo
     ui.cont.hidden = !(
