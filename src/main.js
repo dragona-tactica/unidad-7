@@ -367,6 +367,7 @@ new p5((p) => {
 
   function restart() {
     ui.over.hidden = true;
+    for (const P of parents) P.played = false;
     won = false;
     winPending = false;
     resetFamily();
@@ -377,13 +378,9 @@ new p5((p) => {
     startScreens();
   }
 
-  // Los celulares persiguen a los osos que se están jugando. Si juega una
-  // sola persona, el oso quieto en la palabra no es perseguido.
-  function chaseTargets() {
-    const t = p.millis();
-    const active = parents.filter((P) => P.lastInput && t - P.lastInput < 8000);
-    return (active.length ? active : parents).map((P) => P.body.position);
-  }
+  // Solo participan los osos que alguien movió. Si juega una sola persona,
+  // el otro oso no es perseguido ni dañado: los celulares lo atraviesan.
+  const playingParents = () => parents.filter((P) => P.played);
 
   function onPhone(P, ph) {
     const t = p.millis();
@@ -485,7 +482,7 @@ new p5((p) => {
     const k = CONTROLS[P.player];
     const ax = (p.keyIsDown(k.right) ? 1 : 0) - (p.keyIsDown(k.left) ? 1 : 0);
     const ay = (p.keyIsDown(k.down) ? 1 : 0) - (p.keyIsDown(k.up) ? 1 : 0);
-    if (ax || ay) P.lastInput = p.millis();
+    if (ax || ay) P.played = true;
     let vx = b.velocity.x * PARAMS.parentDamping + ax * PARAMS.parentAccel;
     let vy = b.velocity.y * PARAMS.parentDamping + ay * PARAMS.parentAccel;
     const s = Math.hypot(vx, vy);
@@ -900,7 +897,9 @@ new p5((p) => {
     updatePhase();
     if (mode === 'screens' && phase === 'play') {
       updateHazards(hazards, {
-        W: p.width, H: p.height, size: fontSize, round, t: p.millis(), parents, targets: chaseTargets(),
+        W: p.width, H: p.height, size: fontSize, round, t: p.millis(),
+        parents: playingParents(),
+        targets: playingParents().map((P) => P.body.position),
         avoid: [...parents.map((P) => P.body.position), { x: p.width / 2, y: p.height / 2 }],
         onPhone, onGift,
       });
